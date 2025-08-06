@@ -588,7 +588,7 @@ void MirrorOrch::setSessionState(const string& name, const MirrorEntry& session,
     if (attr.empty() || attr == MIRROR_SESSION_MONITOR_PORT)
     {
         Port port;
-        if ((gMySwitchType == "voq") && (session.type == MIRROR_SESSION_ERSPAN))
+        if (rcy_erspan && (session.type == MIRROR_SESSION_ERSPAN))
         {
              if (!m_portsOrch->getRecircPort(port, Port::Role::Rec))
              {
@@ -605,7 +605,7 @@ void MirrorOrch::setSessionState(const string& name, const MirrorEntry& session,
 
     if (attr.empty() || attr == MIRROR_SESSION_DST_MAC_ADDRESS)
     {
-        if ((gMySwitchType == "voq") && (session.type == MIRROR_SESSION_ERSPAN))
+        if (rcy_erspan && (session.type == MIRROR_SESSION_ERSPAN))
         {
              value = gMacAddress.to_string();
         } else
@@ -945,7 +945,7 @@ bool MirrorOrch::activateSession(const string& name, MirrorEntry& session)
     {
         attr.id = SAI_MIRROR_SESSION_ATTR_MONITOR_PORT;
         // Set monitor port to recirc port in voq switch.
-        if (gMySwitchType == "voq")
+        if (rcy_erspan)
         {
             Port recirc_port;
             if (!m_portsOrch->getRecircPort(recirc_port, Port::Role::Rec))
@@ -1021,7 +1021,7 @@ bool MirrorOrch::activateSession(const string& name, MirrorEntry& session)
 
         attr.id = SAI_MIRROR_SESSION_ATTR_DST_MAC_ADDRESS;
         // Use router mac as mirror dst mac in voq switch.
-        if ((gMySwitchType == "voq") && (session.type == MIRROR_SESSION_ERSPAN))
+        if (rcy_erspan && (session.type == MIRROR_SESSION_ERSPAN))
         {
              memcpy(attr.value.mac, gMacAddress.getMac(), sizeof(sai_mac_t));
         }
@@ -1137,7 +1137,7 @@ bool MirrorOrch::updateSessionDstMac(const string& name, MirrorEntry& session)
 
     sai_attribute_t attr;
     attr.id = SAI_MIRROR_SESSION_ATTR_DST_MAC_ADDRESS;
-    if ((gMySwitchType == "voq") && (session.type == MIRROR_SESSION_ERSPAN))
+    if (rcy_erspan && (session.type == MIRROR_SESSION_ERSPAN))
     {
          memcpy(attr.value.mac, gMacAddress.getMac(), sizeof(sai_mac_t));
     } else
@@ -1177,7 +1177,7 @@ bool MirrorOrch::updateSessionDstPort(const string& name, MirrorEntry& session)
     sai_attribute_t attr;
     attr.id = SAI_MIRROR_SESSION_ATTR_MONITOR_PORT;
     // Set monitor port to recirc port in voq switch.
-    if ((gMySwitchType == "voq") && (session.type == MIRROR_SESSION_ERSPAN))
+    if (rcy_erspan && (session.type == MIRROR_SESSION_ERSPAN))
     {
          if (!m_portsOrch->getRecircPort(port, Port::Role::Rec))
          {
@@ -1551,6 +1551,19 @@ void MirrorOrch::updateVlanMember(const VlanMemberUpdate& update)
     }
 }
 
+void MirrorOrch::processPorts()
+{
+    Port port;
+    if ((gMySwitchType == "voq") && m_portsOrch->getRecircPort(port, Port::Role::Rec))
+    {
+        rcy_erspan = true;
+    }
+    else
+    {
+        rcy_erspan = false;
+    }
+}
+
 void MirrorOrch::doTask(Consumer& consumer)
 {
     SWSS_LOG_ENTER();
@@ -1558,6 +1571,12 @@ void MirrorOrch::doTask(Consumer& consumer)
     if (!gPortsOrch->allPortsReady())
     {
         return;
+    }
+
+    if (!ports_processed)
+    {
+       processPorts();
+       ports_processed=true;
     }
 
     auto it = consumer.m_toSync.begin();
